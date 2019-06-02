@@ -68,7 +68,19 @@ public class ExampleBot {
                 .allowBlockingCallsInside("java.io.FileInputStream", "readBytes")
                 .install();
 
+        // for proxy env
+        /*
+        ReactorResourceProvider reactor = new ReactorResourceProvider(
+                HttpClient.create()
+                        .compress(true)
+                        .tcpConfiguration(tcp -> tcp.proxy(spec -> spec.type(ProxyProvider.Proxy.SOCKS5)
+                                .host("localhost")
+                                .port(3333)))
+        );
+        */
+
         DiscordClient client = new DiscordClientBuilder(token)
+                //.setReactorResourceProvider(reactor)
                 .setRouterOptions(RouterOptions.builder()
                         // globally suppress any not found (404) error
                         .onClientResponse(ResponseFunction.emptyIfNotFound())

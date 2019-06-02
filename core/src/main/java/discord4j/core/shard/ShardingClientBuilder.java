@@ -18,6 +18,7 @@
 package discord4j.core.shard;
 
 import discord4j.common.JacksonResourceProvider;
+import discord4j.common.ReactorResourceProvider;
 import discord4j.common.SimpleBucket;
 import discord4j.core.DiscordClientBuilder;
 import discord4j.gateway.GatewayObserver;
@@ -71,6 +72,9 @@ public class ShardingClientBuilder {
 
     @Nullable
     private Predicate<Integer> shardIndexFilter;
+
+    @Nullable
+    private ReactorResourceProvider reactorResourceProvider;
 
     /**
      * Initialize a new builder with the given token.
@@ -235,6 +239,19 @@ public class ShardingClientBuilder {
         return this;
     }
 
+    /**
+     * Set a new {@link ReactorResourceProvider} dedicated to set up a connection pool, an event pool, as well as the
+     * supporting {@link HttpClient} used for making rest requests and maintaining gateway connections.
+     *
+     * @param reactorResourceProvider the new resource provider used for rest and gateway operations, can be {@code
+     * null} to use a default value
+     * @return this builder
+     */
+    public ShardingClientBuilder setReactorResourceProvider(@Nullable ReactorResourceProvider reactorResourceProvider) {
+        this.reactorResourceProvider = reactorResourceProvider;
+        return this;
+    }
+
     private RouterFactory initRouterFactory() {
         if (routerFactory != null) {
             return routerFactory;
@@ -274,6 +291,13 @@ public class ShardingClientBuilder {
         return index -> true;
     }
 
+    private ReactorResourceProvider initReactorResources() {
+        if (reactorResourceProvider != null) {
+            return reactorResourceProvider;
+        }
+        return new ReactorResourceProvider();
+    }
+
     /**
      * Create a sequence of {@link DiscordClientBuilder}s each representing a shard, up to the resulting shard count,
      * filtering out values not matching the predicate given by {@link #getShardIndexFilter()}.
@@ -297,7 +321,8 @@ public class ShardingClientBuilder {
      */
     public Flux<DiscordClientBuilder> build() {
         final JacksonResourceProvider jackson = new JacksonResourceProvider();
-        final DiscordWebClient webClient = new DiscordWebClient(HttpClient.create().compress(true),
+        final ReactorResourceProvider reactor = initReactorResources();
+        final DiscordWebClient webClient = new DiscordWebClient(reactor.getHttpClient(),
                 ExchangeStrategies.jackson(jackson.getObjectMapper()), token);
         final RouterFactory routerFactory = initRouterFactory();
         final Router router = initRouter(routerFactory, webClient);
@@ -310,9 +335,10 @@ public class ShardingClientBuilder {
 
         final DiscordClientBuilder builder = new DiscordClientBuilder(token)
                 .setJacksonResourceProvider(jackson)
+                .setReactorResourceProvider(reactor)
                 .setRouterFactory(new SingleRouterFactory(router))
                 .setIdentifyLimiter(new RateLimiterTransformer(new SimpleBucket(1, Duration.ofSeconds(6))))
-                .setEventScheduler(ForkJoinPoolScheduler.create("events"))
+                .setEventScheduler(ForkJoinPoolScheduler.create("discord4j-events"))
                 .setGatewayObserver((s, o) -> {
                     if (s.equals(GatewayObserver.CONNECTED)) {
                         log.info("Shard {} connected", o.getShardIndex());

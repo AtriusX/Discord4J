@@ -19,6 +19,7 @@ package discord4j.core;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import discord4j.common.GitProperties;
 import discord4j.common.JacksonResourceProvider;
+import discord4j.common.ReactorResourceProvider;
 import discord4j.common.SimpleBucket;
 import discord4j.common.jackson.UnknownPropertyHandler;
 import discord4j.core.event.EventDispatcher;
@@ -47,7 +48,10 @@ import discord4j.store.api.service.StoreServiceLoader;
 import discord4j.store.api.util.StoreContext;
 import discord4j.store.jdk.JdkStoreService;
 import discord4j.voice.VoiceClient;
-import reactor.core.publisher.*;
+import reactor.core.publisher.EmitterProcessor;
+import reactor.core.publisher.FluxProcessor;
+import reactor.core.publisher.Hooks;
+import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 import reactor.netty.http.client.HttpClient;
@@ -93,6 +97,9 @@ public final class DiscordClientBuilder {
 
     @Nullable
     private JacksonResourceProvider jacksonResourceProvider;
+
+    @Nullable
+    private ReactorResourceProvider reactorResourceProvider;
 
     @Nullable
     private RouterFactory routerFactory;
@@ -296,6 +303,19 @@ public final class DiscordClientBuilder {
      */
     public DiscordClientBuilder setJacksonResourceProvider(@Nullable JacksonResourceProvider jacksonResourceProvider) {
         this.jacksonResourceProvider = jacksonResourceProvider;
+        return this;
+    }
+
+    /**
+     * Set a new {@link ReactorResourceProvider} dedicated to set up a connection pool, an event pool, as well as the
+     * supporting {@link HttpClient} used for making rest requests and maintaining gateway connections.
+     *
+     * @param reactorResourceProvider the new resource provider used for rest and gateway operations, can be {@code
+     * null} to use a default value
+     * @return this builder
+     */
+    public DiscordClientBuilder setReactorResourceProvider(@Nullable ReactorResourceProvider reactorResourceProvider) {
+        this.reactorResourceProvider = reactorResourceProvider;
         return this;
     }
 
@@ -595,8 +615,11 @@ public final class DiscordClientBuilder {
         return new JacksonResourceProvider(mapper -> mapper.addHandler(new UnknownPropertyHandler(true)));
     }
 
-    private HttpClient initHttpClient() {
-        return HttpClient.create().compress(true);
+    private ReactorResourceProvider initReactorResources() {
+        if (reactorResourceProvider != null) {
+            return reactorResourceProvider;
+        }
+        return new ReactorResourceProvider();
     }
 
     private DiscordWebClient initWebClient(HttpClient httpClient, ObjectMapper mapper) {
@@ -656,7 +679,8 @@ public final class DiscordClientBuilder {
 
         // Prepare REST client
         final JacksonResourceProvider jackson = initJacksonResources();
-        final HttpClient httpClient = initHttpClient();
+        final ReactorResourceProvider reactor = initReactorResources();
+        final HttpClient httpClient = reactor.getHttpClient();
         final DiscordWebClient webClient = initWebClient(httpClient, jackson.getObjectMapper());
         final RouterFactory routerFactory = initRouterFactory();
         final RestClient restClient = new RestClient(initRouter(routerFactory, webClient));
