@@ -119,7 +119,7 @@ public class EmitterEventDispatcher implements EventDispatcher {
         return on(eventClass).flatMap(event -> eventListener.apply(event)
                 .onErrorResume(t -> {
                     Logger log = Loggers.getLogger("discord4j.events." + eventClass.getSimpleName());
-                    log.error("[shard={}] Error while processing event", event.getShardInfo().format(), t);
+                    log.error(format(event, "Error while processing event"), t);
                     return Mono.empty();
                 })
                 .thenReturn(event));
@@ -133,5 +133,10 @@ public class EmitterEventDispatcher implements EventDispatcher {
     @Override
     public void complete() {
         sink.complete();
+    }
+
+    public static String format(Event event, String msg) {
+        return "[gateway=" + Integer.toHexString(event.getGateway().hashCode()) + ", shard=" +
+                event.getShardInfo().getIndex() + ',' + event.getShardInfo().getCount() + "] " + msg;
     }
 }

@@ -183,7 +183,8 @@ public class DiscordRequest<T> {
      * @return the result of this request
      */
     public Mono<T> exchange(Router router) {
-        return router.exchange(this);
+        return router.exchange(this)
+                .subscriberContext(ctx -> ctx.put("request", Integer.toHexString(hashCode())));
     }
 
     @Override
